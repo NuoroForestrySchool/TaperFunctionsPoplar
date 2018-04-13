@@ -1,0 +1,26 @@
+---
+title: "Taper Functions for poplar plantations"
+output: html_notebook
+---
+
+Assessment of poplar profiles sensitivity against plantation density and competition anisotropy
+
+```{r}
+library(readr)
+urlfolder<- 'https://raw.githubusercontent.com/NuoroForestrySchool/TaperFunctionsPoplar/master/Data/'
+urlfile <- paste0(urlfolder, 'V400_passo10cm.csv')
+dsin<-read.csv(urlfile)
+
+```
+
+
+Exploring version 0 data
+
+```{r}
+library(plot3Drgl)
+id <- levels(dsin$treid)
+#with(dsin[dsin$treid == id[1],], scatter3Drgl(X, Y, Z))
+with(dsin[dsin$treid == id[1],], scatter3D(X, Y, Z))
+
+```
+
