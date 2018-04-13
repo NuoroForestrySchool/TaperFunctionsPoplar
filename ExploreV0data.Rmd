@@ -1,15 +1,16 @@
 ---
 title: "Taper Functions for poplar plantations"
-output: html_notebook
+output:
+  html_document:
+    df_print: paged
 ---
 
 Assessment of poplar profiles sensitivity against plantation density and competition anisotropy
 
 ```{r}
 library(readr)
-urlfolder<- 'https://raw.githubusercontent.com/NuoroForestrySchool/TaperFunctionsPoplar/master/Data/'
-urlfile <- paste0(urlfolder, 'V400_passo10cm.csv')
-dsin<-read.csv(urlfile)
+urlfolder<- 'https://raw.githubusercontent.com/NuoroForestrySchool/Data/master/TaperData/2018Poplar_TLSPuletti/'
+files <- c('V400_passo10cm.csv', "V500_passo50cm.csv")
 
 ```
 
@@ -17,10 +18,17 @@ dsin<-read.csv(urlfile)
 Exploring version 0 data
 
 ```{r}
-library(plot3Drgl)
-id <- levels(dsin$treid)
-#with(dsin[dsin$treid == id[1],], scatter3Drgl(X, Y, Z))
-with(dsin[dsin$treid == id[1],], scatter3D(X, Y, Z))
+#library(plot3Drgl)
+library(plot3D)
+
+for (f in files) {
+  urlfile <- paste0(urlfolder, f)
+  dsin<-read.csv(urlfile)
+  
+  id <- levels(dsin$treid)
+  #with(dsin[dsin$treid == id[1],], scatter3Drgl(X, Y, Z))
+  with(dsin[dsin$treid == id[1],], scatter3D(X, Y, Z))
+}
 
 ```
 

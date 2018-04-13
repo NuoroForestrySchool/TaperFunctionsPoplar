@@ -3,4 +3,5 @@
 .RData
 .Ruserdata
 *.md
-Data/
+metastore_db
+derby.log
