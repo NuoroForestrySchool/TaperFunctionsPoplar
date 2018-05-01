@@ -7,28 +7,122 @@ output:
 
 Assessment of poplar profiles sensitivity against plantation density and competition anisotropy
 
-```{r}
-library(readr)
-urlfolder<- 'https://raw.githubusercontent.com/NuoroForestrySchool/Data/master/TaperData/2018Poplar_TLSPuletti/'
-files <- c('V400_passo10cm.csv', "V500_passo50cm.csv")
+```{r read-data}
+library(tidyverse)
+source("ReadData.R", echo = T)
 
 ```
 
 
-Exploring version 0 data
+```{r functions}
+# segment-segment intersection code
+# http://paulbourke.net/geometry/pointlineplane/
+ssi <- function(x1, x2, x3, x4, y1, y2, y3, y4){
 
-```{r}
-#library(plot3Drgl)
-library(plot3D)
+  denom <- ((y4 - y3)*(x2 - x1) - (x4 - x3)*(y2 - y1))
+  denom[abs(denom) < 1e-10] <- NA # parallel lines
 
-for (f in files) {
-  urlfile <- paste0(urlfolder, f)
-  dsin<-read.csv(urlfile)
-  
-  id <- levels(dsin$treid)
-  #with(dsin[dsin$treid == id[1],], scatter3Drgl(X, Y, Z))
-  with(dsin[dsin$treid == id[1],], scatter3D(X, Y, Z))
+  ua <- ((x4 - x3)*(y1 - y3) - (y4 - y3)*(x1 - x3)) / denom
+  ub <- ((x2 - x1)*(y1 - y3) - (y2 - y1)*(x1 - x3)) / denom
+
+  x <- x1 + ua * (x2 - x1)
+  y <- y1 + ua * (y2 - y1)
+  inside <- (ua >= 0) & (ua <= 1) & (ub >= 0) & (ub <= 1)
+  data.frame(x = ifelse(inside, x, NA), 
+             y = ifelse(inside, y, NA))
+
 }
+```
+
+
+# Exploring version 1 data
+
+Single tree - four sides
+
+```{r}
+library(tidyverse)
+library(magrittr)
+library(plot3Drgl)
+#library(plot3D)
+
+# save plotting parameters
+pm <- par("mfrow")
+pmar <- par("mar")
+
+dsin %>%
+#  filter(tesi==unique(tesi)[1], treid == unique(treid)[1], id_lato == unique(id_lato)[1]) %$%
+  filter(tesi==unique(tesi)[1], treid == unique(treid)[2]) %$%
+  scatter3D(X, Y, Z)
+plotrgl(new = TRUE)
 
 ```
+
+compute pit
+
+```{r}
+# dsin <- head(dsin)
+cooX <- dsin %>% select(-Y,-Z) %>% spread(id_lato, X) %>% 
+  rename(x1 = interfila_piena,
+         x2 = interfila_vuota,
+         x3 = intrafila_alto,
+         x4 = intrafila_basso)
+cooY <-
+  dsin %>% select(-X,-Z) %>% spread(id_lato, Y) %>% 
+  rename(y1 = interfila_piena,
+         y2 = interfila_vuota,
+         y3 = intrafila_alto,
+         y4 = intrafila_basso)
+pit <- cooX %>% full_join(cooY) %>%   
+  mutate(id_lato = 'pit', 
+         X  = ssi(x1, x2, x3, x4, y1, y2, y3, y4)[['x']],
+         Y  = ssi(x1, x2, x3, x4, y1, y2, y3, y4)[['y']]) %>%
+  select(-x1:-x4, -y1:-y4)
+
+# view
+ds2 <- dsin %>%
+  select(-Z) %>%
+  union(pit) %>%
+  mutate(id_lato = as.factor(id_lato))
+ds2 %>%
+  filter(tesi==unique(tesi)[1], treid == unique(treid)[2]) %$%
+  scatter3D(X, Y, slice)
+plotrgl(new = TRUE)
+
+```
+
+Compute radial width
+
+```{r}
+pit <- pit %>%   
+  rename(X_pit  = X,
+         Y_pit  = Y) %>%
+  select(-id_lato)
+ds3 <- dsin %>%
+  right_join(pit) %>%
+  mutate(radius = sqrt((X- X_pit)^2 + (Y-Y_pit)^2))
+
+library(ggplot2)
+ds3 %>%
+  filter(tesi == 'V500') %>%
+  ggplot(aes(slice, radius)) +
+  geom_line(aes(color=id_lato)) +
+  facet_grid(treid~length_toppo, scales="free")
+
+# Reduce to Diametres
+
+ds4 <- ds3 %>%
+  select(tesi, length_toppo, treid, slice, id_lato, radius) %>%
+  mutate(id_lato2 = substr(id_lato, 1, 6)) %>%
+  group_by(tesi, length_toppo, treid, slice, id_lato2) %>%
+  summarise(diam = sum(radius)) %>%
+  ungroup()
+
+ds4 %>%
+  filter(tesi == 'V500') %>%
+  ggplot(aes(slice, diam)) +
+  geom_line(aes(color=id_lato2)) +
+  facet_grid(treid~length_toppo, scales="free")
+
+```
+
 
