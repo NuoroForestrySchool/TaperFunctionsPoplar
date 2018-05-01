@@ -6,4 +6,4 @@ In each stand the plot consits of 6 pair of trees located on facing rows, 900 cm
 
 ```
 
-[Link](https://github.com/NuoroForestrySchool/TaperFunctionsPoplar/blob/master/figure/unnamed-chunk-2-1.png) 
+[First check plot](https://github.com/NuoroForestrySchool/TaperFunctionsPoplar/blob/master/figure/unnamed-chunk-2-1.png) 
