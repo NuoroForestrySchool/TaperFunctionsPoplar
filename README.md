@@ -1,4 +1,4 @@
-## Taper functions for poplar plantations
+Assessment of poplar profiles sensitivity against plantation density and competition anisotropy
 
 ```markdown
 Data stems from a TLS survey in 3 poplar plantations with different intre-tree distances: 400, 450 and 500 cm
@@ -6,4 +6,4 @@ In each stand the plot consits of 6 pair of trees located on facing rows, 900 cm
 
 ```
 
-[Link](https://github.com/NuoroForestrySchool/TaperFunctionsPoplar/blob/master/ExploreV0data.html) 
+[Link](https://github.com/NuoroForestrySchool/TaperFunctionsPoplar/blob/master/figure/unnamed-chunk-2-1.png) 
