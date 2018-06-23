@@ -1,0 +1,69 @@
+---
+title: "Learning HLM: Hierarchical Linear Models"
+output: html_notebook
+---
+
+"Fitting Linear Mixed-Effects Models Using lme4" - Douglas Bates, Martin Mächler, Ben Bolker, Steve Walker - 
+http://127.0.0.1:30954/help/library/lme4/doc/lmer.pdf
+Each random-effects term is of the form (expr | factor). The expression expr is evaluated as a linear model formula, producing a model matrix following the same rules used in standard R modeling functions (e.g., lm or glm). The expression factor is evaluated as an R factor. One way to think about the vertical bar operator is as a special kind of interaction between the model matrix and the grouping factor. This interaction ensures that the columns of the model matrix have different effects for each level of the grouping factor. What makes this a special kind of interaction is that these effects are modeled as unobserved random variables, rather than unknown fixed parameters
+
+Following: https://www.jstatsoft.org/article/view/v056i05/v56i05.pdf
+
+```{r}
+library(mlmRev) 
+data("Exam", package = "mlmRev")
+head(Exam)
+```
+
+# Background
+For each student, the data consist of their gender (sex) and two standardized exam scores an intake score on the London Reading Test (LRT) at age 11 (standLRT) and a score on the General Certificate of Secondary Education (GCSE) examination at age 16 (normexam). Additionally, the students’ LRT scores were used to segment students into three categories (bottom 25%, middle 50%, and top 25%) based on their verbal reasoning subscore (vr) and overall score (intake). At the school level, the data contain the average intake score for the school (schavg) and type based on school gender (schgend, coded as mixed, boys, or girls).
+we explore the relationship between a student's intake score and their achievement on the GCSE examination.
+# Level 1 - 'school'
+We fit an initial two-level HLM using a student's standardized London Reading Test intake score (standLRT) to explain their GCSE exam score allowing for a random intercept for each school:
+   normexam ~ standLRT + (1 | school)
+```{r}
+library(HLMdiag)
+library(ggplot2)
+(fm1 <- lmer(normexam ~ standLRT + (1 | school), Exam, REML = FALSE))
+resid1_fm1 <- HLMresid(fm1, level = 1, type = "LS", standardize = TRUE)
+qplot(x = standLRT, y = LS.resid, data = resid1_fm1, 
+      geom = c("point", "smooth")) + ylab("LS level-1 residuals")
+
+```
+
+Likelihood ratio tests (not shown) confirm that quadratic and cubic terms for standLRT
+contribute signicantly in describing GCSE exam scores, so we incorporate these terms in the
+updated model, fm2.
+
+```{r}
+fm2 <- lmer(normexam ~ standLRT + I(standLRT^2) + I(standLRT^3) +
+              (1 | school), Exam, REML = FALSE)
+resid1_fm2 <- HLMresid(fm2, level = 1, type = "LS", standardize = "semi")
+qplot(x = `I(standLRT^2)`, y = semi.std.resid, data = resid1_fm2) +
+  geom_smooth(method = "lm") + ylab("semi-standardized residuals") +
+  xlab("standLRT2")
+ssresid <- na.omit(resid1_fm2$semi.std.resid)
+ggplot_qqnorm(x = ssresid, line = "rlm")
+
+```
+
+Carrying out this iterative process for the Exam data (not shown) results in the inclusion of student gender in the model. Additionally, including a random slope for standardized LRT, allowing for the strength of relationship between the two exams to vary across schools, was found to significantly improve the model.
+
+```{r}
+ fm3 <- lmer(normexam ~ standLRT + I(standLRT^2) + I(standLRT^3) + sex +
+               (standLRT | school), Exam, REML = FALSE)
+```
+
+
+```{r}
+resid2_fm3 <- HLMresid(object = fm3, level = "school")
+```
+
+[xxx]!C:\Users\ro\Documents\WORK\RICERCA\GitHub\TaperFunctionsPoplar\HLMdiag\Fig5.png
+Figure 5: Plots of the level-2 EB residuals for the intercept plotted against the omitted explanatory variables schgend and schavg. We construct boxplots for schgend to appropriately display a categorical variable and a scatterplot with a smoother to display a continuous variable. The boxplots for schgend are not all centered around zero, indicating that the variable contains information useful in describing the between-school variation in exam scores. Similarly, we observe a positive association in the scatterplot for schavg.
+
+```{r}
+fm4 <- lmer(normexam ~ standLRT + I(standLRT^2) + I(standLRT^3) + sex +
+              schgend + schavg + (standLRT | school), data = Exam, REML = FALSE)
+```
+

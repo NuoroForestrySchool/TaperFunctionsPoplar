@@ -1,0 +1,178 @@
+---
+title: "HLM analysis of differences between poplar profiles taken along or across plantation row direction"
+output: html_notebook
+---
+# General scope
+Assessment of poplar profiles sensitivity against plantation density and competition anisotropy  
+[MEMO: credo sia opportuno ricordarsi di citare
+ Rubio-Cuadrado Á, Bravo-Oviedo A, Mutke S, Del Río M (2018). Climate effects on growth differ according to height and diameter
+along the stem in Pinus pinaster Ait. iForest 11: 237-242. – doi: 10.3832/ifor2318-011 [online 2018-03-12]
+
+
+```{r}
+library(tidyverse)
+library(magrittr)
+library(ggplot2)
+source('ReadData.R')
+tff <- TLSderivedDiam %>%
+  inner_join(stems_basic_measurements, 
+             by = c("tesi" = "Tesi", "treid" = "TreeId")) %>%
+  mutate(deltad = diam_btw_rows - diam_wti_rows)
+
+tff %>% 
+  filter(is.na(deltad)) %$% 
+  unique(data.frame(tesi, treid, slice, length_toppo)) %$% 
+  table(treid, slice, tesi)
+# Ci sono molti diametri NA sopra 5.5
+tff <- tff %>% filter(slice <= 5.5)
+```
+
+
+# Verify outlier and anomalities
+```{r}
+base_graph <- function(df){
+  df %>% 
+    ggplot(aes(x = slice, y = deltad, 
+             group = interaction(tesi, treid),
+             color = interaction(treid, tesi))) +
+    geom_point() +
+    geom_line() 
+}
+base_graph(tff)
+
+# points below -0.1 are clear outliers
+tff %>% 
+  filter(deltad < -.1) %>% 
+  arrange(deltad)
+# they are all in this sample
+tff %>% filter(tesi == 'V500', treid == 's05') %>%
+  mutate(section_length = as.factor(length_toppo)) %>%
+  ggplot(aes(slice, deltad, group = section_length)) +
+    geom_smooth(aes(color = section_length)) +
+    geom_line(aes(color = section_length)) +
+    ggtitle("s05 of V500 is out of range above 4.7m!")
+
+trsh.s05.V500 <- 4.7
+
+tff %>% filter(tesi == 'V500', treid == 's05', slice < trsh.s05.V500) %>%
+  mutate(section_length = as.factor(length_toppo)) %>%
+  ggplot(aes(slice, deltad, group = section_length)) +
+    geom_smooth(aes(color = section_length)) +
+    geom_line(aes(color = section_length)) +
+    ggtitle("s05 of V500 with slice < 4.7 m")
+tff <- tff %>% filter(!(tesi == 'V500'& treid == 's05'& slice >= trsh.s05.V500))
+
+base_graph(tff)
+# sample extending below -.025 is strange
+tff %>% 
+  filter(deltad < -.025) %>% 
+  group_by(tesi, length_toppo, treid) %>%
+  summarise(n(), min(slice), min(deltad), max(deltad))
+# its is this sample
+tff %>% filter(tesi == 'V500', treid == 's10') %>%
+  mutate(section_length = as.factor(length_toppo)) %>%
+  ggplot(aes(slice, deltad, group = section_length)) +
+    geom_smooth(aes(color = section_length)) +
+    geom_line(aes(color = section_length)) +
+    ggtitle("s10 of V500 is strange!")
+
+trsh.s10.V500 <- 3.8
+
+tff %>% filter(tesi == 'V500', treid == 's10', slice < trsh.s10.V500) %>%
+  mutate(section_length = as.factor(length_toppo)) %>%
+  ggplot(aes(slice, deltad, group = section_length)) +
+    geom_smooth(aes(color = section_length)) +
+    geom_line(aes(color = section_length)) +
+    ggtitle(paste0("s10 of V500 with slice <= ", trsh.s10.V500, ", is still strange"))
+tff <- tff %>% filter(!(tesi == 'V500'& treid == 's10'& slice >= trsh.s10.V500))
+
+base_graph(tff) + geom_smooth()
+```
+
+
+```{r}
+for(l in unique(tff$length_toppo)) {
+    cat(paste("\n--- Sections length =", l, "---\n"))
+    tff %>% filter(length_toppo == l) %$% anova(lm(deltad ~ tesi))  %>% print()
+  }
+
+# NON FA'!! tff %$% unique(length_toppo) %>%  map( basic_anova )
+
+oll <- 0.1 # optimal Log Length for profiles discrimination
+# length_toppo ottimale: compromesso tra min lag correlation e conservazione del dettaglio della forma
+stff <- tff  %>%
+  filter(length_toppo == oll)
+stff %$%
+  anova(lm(deltad ~ tesi))
+ggplot(stff) + geom_jitter(aes(tesi, deltad))
+ggplot(stff) + geom_boxplot(aes(tesi, deltad))
+
+
+```
+
+```{r}
+library(HLMdiag)
+library(ggplot2)
+```
+
+
+# Level 1 - 'tesi'
+We fit an initial two-level HLM using crossection height (slice) to explain differences between profiles (deltad) allowing for a random intercept for each 'tesi':
+    `r deltad ~ slice + (1 | tesi) `
+```{r}
+(fm1 <- lmer(deltad ~ slice + (1 | tesi), stff, REML = FALSE))
+resid1_fm1 <- HLMresid(fm1, level = 1, type = "LS", standardize = TRUE)
+qplot(x = slice, y = LS.resid, data = resid1_fm1, 
+      geom = c("point", "smooth")) + ylab("LS level-1 residuals")
+
+```
+
+Level 1 residuals plot evidence a non linear relation between slice and deltad. A quadratic and a cubic terms for slice migth contribute significantly in describing deltad variations, so we incorporate these terms in the updated model, fm2.
+
+```{r}
+fm2 <- lmer(deltad ~ slice + I(slice^2) + I(slice^3) +
+              (1 | tesi), stff, REML = FALSE)
+anova(fm2)
+resid1_fm2 <- HLMresid(fm2, level = 1, type = "LS", standardize = "semi")
+qplot(x = slice, y = semi.std.resid, data = resid1_fm2) +
+  geom_smooth(method = "lm") + ylab("semi-standardized residuals") +
+  xlab("slice")
+ssresid <- na.omit(resid1_fm2$semi.std.resid)
+ggplot_qqnorm(x = ssresid, line = "rlm")
+
+```
+
+Carrying out this iterative process for the (deltad ~ slice) relation we test, by visual inference, the inclusion of other tree attributes in the model. Additionally, including a random slope for slice, allowing for the strength of relationship between the two measures to vary across tesi, was found to significantly improve the model.
+```{r}
+# fm3 <- lmer(deltad ~ slice + I(slice^2) + I(slice^3) + DBH + Htot + Hchioma + Hramo + Hfogliaverde + (slice | tesi), tff, REML = FALSE)
+(fm3 <- lmer(deltad ~ slice + I(slice^2) + DBH + Htot + Hchioma + (slice | tesi), tff, REML = FALSE))
+anova(fm3)
+resid1_fm3 <- HLMresid(fm3, level = 1, type = "LS", standardize = "semi")
+qplot(x = slice, y = semi.std.resid, data = resid1_fm3) +
+  geom_smooth(method = "lm") + ylab("semi-standardized residuals") +
+  xlab("slice")
+ssresid <- na.omit(resid1_fm3$semi.std.resid)
+ggplot_qqnorm(x = ssresid, line = "rlm")
+
+```
+In an exploratory setting we would go through this cycle of residual analysis, identication of explanatory variables, and model tting multiple times until a satisfactory level-1 model is found (Tukey 1977).
+
+# Level-2 residuals
+The level-2, or random eects, residuals are dened as Zibi or, more commonly, bi.
+Following an upward residual analysis we prefer the use of EB residuals at level 2 (insted of LS residuals).
+The level-2 residuals are used to
+* identify additional explanatory variables that contribute significantly to the model,
+* check linearity of the level-2 explanatory variables, and
+* investigate whether the level-2 residuals follow a normal distribution.
+To obtain the level-2 EB residuals from model fm3, we use the following code:
+```{r}
+resid2_fm3 <- HLMresid(object = fm3, level = "tesi")
+head(resid2_fm3)
+```
+
+```{r}
+(fmT <- lmer(deltad ~ slice + I(slice^2) + (1 | tesi/treid) + (slice | tesi/treid), stff, REML = FALSE))
+anova(fmT)
+
+```
+

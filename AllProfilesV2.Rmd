@@ -17,45 +17,17 @@ along the stem in Pinus pinaster Ait. iForest 11: 237-242. – doi: 10.3832/ifor
 library(tidyverse)
 library(magrittr)
 library(ggplot2)
-source("ReadData.R", echo = T)
-
-```
-
-
-# Compute diameters
-(directly, not through Radius)
-
-```{r diameters}
-
-cooX <- dsin %>% select(-Y, -Z) %>% spread(id_lato, X) %>%
-  rename(
-    xe1 = interfila_piena,
-    xe2 = interfila_vuota,
-    xa1 = intrafila_alto,
-    xa2 = intrafila_basso
-  )
-
-cooY <-
-  dsin %>% select(-X, -Z) %>% spread(id_lato, Y) %>%
-  rename(
-    ye1 = interfila_piena,
-    ye2 = interfila_vuota,
-    ya1 = intrafila_alto,
-    ya2 = intrafila_basso
-  )
-
-Diameters <- cooX %>%
-  full_join(cooY) %>%
-  mutate(btw_rows = sqrt((xe1 - xe2) ^ 2 + (ye1 - ye2) ^ 2),
-         wti_rows = sqrt((xa1 - xa2) ^ 2 + (ya1 - ya2) ^ 2)) %>%
-  select(-xe1,-xe2,-xa1,-xa2,-ye1,-ye2,-ya1,-ya2) %>%
-  gather(direction, diam,-tesi,-length_toppo,-treid,-slice)
+TLSderivedDiam <- read.csv("expData2.csv")
 
 ```
 
 # Plot all profiles
 
 ```{r plot, fig.height=9, fig.width=7}
+Diameters <- TLSderivedDiam %>% 
+  select( -ends_with("centro")) %>% 
+  gather(direction, diam, starts_with("diam"))
+
 gl <- Diameters %$%
   levels(tesi) %>%
   map(
@@ -70,3 +42,26 @@ gl <- Diameters %$%
 print(gl)
 
 ```
+
+
+```{r}
+library(TapeR)
+oll <- 0.5 # Optimal Log Length
+# length_toppo ottimale: compromesso tra min lag correlation e conservazione del dettaglio della forma
+
+#define the relative knot positions and order of splines
+knt_x = c(0.0, 0.1, 0.5, 1.0); ord_x = 2 # B-Spline knots: fix effects; order (cubic = 4)
+knt_z = c(0.0, 0.1     , 1.0); ord_z = 2 # B-Spline knots: rnd effects
+
+tff <- TLSderivedDiam %>%
+  filter(treid  %in% tidl[1:6]) %>%
+  filter(length_toppo == oll) %>%
+  inner_join(stems_basic_measurements, by = c("tesi" = "Tesi", "treid" = "TreeId")) %>%
+  transmute(Id = paste0(tesi ,treid), 
+         d_sez = diam_wti_rows *100, 
+         rel_h = slice / Htot) %$%
+  TapeR_FIT_LME.f(Id, d_sez, rel_h, knt_x, ord_x, knt_z, ord_z, IdKOVb = "pdSymm")
+#fit the model
+
+```
+

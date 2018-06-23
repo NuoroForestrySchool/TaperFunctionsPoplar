@@ -17,7 +17,8 @@ along the stem in Pinus pinaster Ait. iForest 11: 237-242. – doi: 10.3832/ifor
 library(tidyverse)
 library(magrittr)
 library(ggplot2)
-source("ReadData.R", echo = T)
+load(file="BasicAndTLS.Rdata")
+#  OR  source("ReadData.R", echo = T)
 
 ```
 
@@ -27,7 +28,7 @@ source("ReadData.R", echo = T)
 
 ```{r diameters}
 
-cooX <- dsin %>% select(-Y, -Z) %>% spread(id_lato, X) %>%
+cooX <- TLSstem_vertical_crosssection %>% select(-Y, -Z) %>% spread(id_lato, X) %>%
   rename(
     xe1 = interfila_piena,
     xe2 = interfila_vuota,
@@ -36,7 +37,7 @@ cooX <- dsin %>% select(-Y, -Z) %>% spread(id_lato, X) %>%
   )
 
 cooY <-
-  dsin %>% select(-X, -Z) %>% spread(id_lato, Y) %>%
+  TLSstem_vertical_crosssection %>% select(-X, -Z) %>% spread(id_lato, Y) %>%
   rename(
     ye1 = interfila_piena,
     ye2 = interfila_vuota,
@@ -55,7 +56,7 @@ Diameters <- cooX %>%
 
 # Plot all profiles
 
-```{r plot, fig.height=9, fig.width=7}
+```{r plot, fig.height=9, fig.width=7, eval=FALSE}
 gl <- Diameters %$%
   levels(tesi) %>%
   map(
@@ -70,3 +71,33 @@ gl <- Diameters %$%
 print(gl)
 
 ```
+
+# Calibrate taper functions
+
+```{r}
+library(TapeR)
+oll <- 0.25 # Optimal Log Length
+# length_toppo ottimale: compromesso tra min lag correlation e conservazione del dettaglio della forma
+
+Diam_dec <- Diameters %>%
+  filter(length_toppo == oll) %>%
+  group_by(tesi, treid, direction) %>%
+  mutate(tpr = diam - lead(diam,1)) %>%
+  filter(tpr >= 0)
+  
+
+#define the relative knot positions and order of splines
+knt_x = c(0.0, 0.1, 0.75, 1.0);	ord_x = 4 # B-Spline knots: fix effects; order (cubic = 4)
+knt_z = c(0.0, 0.1       ,1.0); ord_z = 4 # B-Spline knots: rnd effects
+
+tff <- Diam_dec %>%
+  filter(length_toppo == oll) %>%
+  full_join(stems_basic_measurements, by = c("tesi" = "Tesi", "treid" = "TreeId")) %>%
+  mutate(Id = paste0(tesi ,treid, direction), 
+         d_sez = diam *100, 
+         rel_h = slice / Htot) %$%
+  TapeR_FIT_LME.f(Id, d_sez, rel_h, knt_x, ord_x, knt_z, ord_z)
+  #fit the model
+
+```
+
