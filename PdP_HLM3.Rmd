@@ -1,0 +1,148 @@
+---
+title: "Contrasting between- and within-rows stem profiles in poplar plantations - Modelling tree and 'Treat' effect - HLM approach"
+author: "Puletti N., Scotti R., ???"
+date: june 2018
+output:
+  pdf_document:
+    toc: true
+---
+
+# Access to the data
+```{r}
+library(tidyverse)
+library(magrittr)
+library(broom)
+
+source("DataWrangling.R")
+
+```
+
+
+*** following: https://www.jstatsoft.org/article/view/v056i05/ ***
+
+# Level 1 - 'TreeId'
+We fit an initial two-level HLM using crossection height (Sect_height) to explain differences between profiles (delta_d) allowing for a random intercept for each tree:     
+***   delta_d ~ Sect_height + (1 | TreeId)   ***
+
+```{r}
+library(lme4)
+
+mc <- function(frml, ...) {
+# evaluate the model (specified as formula) and produce the residulas control plot
+  fm <- stff %>%  lmer(data = ., frml, ... )
+  p <- qplot(x = stff$Sect_height, y = residuals(fm), 
+        geom = c("point", "smooth")) + ylab("level-1 residuals") +
+    ggtitle(paste0(as.expression(frml)))
+  print(p)
+return(fm)
+}
+
+# prova senza Treat e senza Sect_height
+fm00 <- mc(delta_d_cm ~  (1 | TreeId))
+
+# prova con Treat ma senza Sect_height
+fm10 <- mc(delta_d_cm ~ Treat + (1 | TreeId))
+summary(fm10)
+# Treat  non ha effetto! (più evidente dopo, con anova)
+summary(fm00)
+
+```
+## The  two orthogonal profiles are significantly different: 1.8 cm +/- 10%
+```{r}
+anova(fm10, fm00)
+
+# Contributo di Treat non significativo
+qplot(x = stff$Treat, y = residuals(fm10), 
+      geom = c("boxplot")) + ylab("level-1 residuals")
+# residui distribuiti male e non a zero di media per Treat
+
+```
+
+
+```{r}
+# prova CON Sect_height,   lineare
+fm01 <- mc(delta_d_cm ~ Sect_height + (1 | TreeId))
+fm11 <- mc(delta_d_cm ~ Treat + Sect_height + (1 | TreeId))
+anova(fm11, fm01)
+qplot(x = stff$Treat, y = residuals(fm11), 
+      geom = c("boxplot")) + ylab("level-1 residuals")
+# residui ancora etreoscedastici
+
+# prova CON Sect_height, parabolica
+fm12 <- mc(delta_d_cm ~ Treat + (1 | TreeId) + Sect_height *(1 | TreeId) + I(Sect_height^2)* (1 | TreeId))
+fm02 <- mc(delta_d_cm ~ (1 | TreeId) + Sect_height *(1 | TreeId) + I(Sect_height^2)* (1 | TreeId))
+anova(fm02,fm12)
+stff %>% ggplot() +
+  geom_point(aes(x = Sect_height, y = delta_d_cm)) +
+  geom_smooth(aes(x = Sect_height, y = delta_d_cm)) +
+  geom_line(aes(x = Sect_height, y = fitted(fm12)), color = "yellow", size = 1) + 
+  facet_wrap(~TreeId)
+
+# prova CON Sect_height, al cubo (con RML=T, non converge!)
+fm13 <- mc(delta_d_cm ~ Treat + (1 | TreeId) 
+           + Sect_height *(1 | TreeId) 
+           + I(Sect_height^2)* (1 | TreeId)
+           + I(Sect_height^3)* (1 | TreeId)
+           , REML = F)
+fm03 <- mc(delta_d_cm ~ (1 | TreeId) 
+           + Sect_height *(1 | TreeId) 
+           + I(Sect_height^2)* (1 | TreeId)
+           + I(Sect_height^3)* (1 | TreeId)
+           , REML = F)
+anova(fm03,fm13)
+
+# l'effetto di Treat, non si manifesta in nessun modo!!
+#  Pr(>Chisq) = 0.761  !! Conferma, non si vede differenza
+
+
+stff %>% ggplot() +
+  geom_point(aes(x = Sect_height, y = delta_d_cm)) +
+  geom_smooth(aes(x = Sect_height, y = delta_d_cm)) +
+  geom_line(aes(x = Sect_height, y = fitted(fm13)), color = "yellow", size = 1) + 
+  facet_wrap(~TreeId)
+
+
+```
+
+In an exploratory setting we would go through this cycle of residual analysis, identification of explanatory variables, and model fitting multiple times until a satisfactory level-1 model is found (Tukey 1977).
+
+# Level-2 residuals
+The level-2, or random effects, residuals are defined as Zibi or, more commonly, bi.
+Following an upward residual analysis we prefer the use of EB residuals at level 2 (insted of LS residuals).
+The level-2 residuals are used to
+* identify additional explanatory variables that contribute significantly to the model,
+* check linearity of the level-2 explanatory variables, and
+* investigate whether the level-2 residuals follow a normal distribution.
+To obtain the level-2 EB residuals from model fm3, we use the following code:
+```{r}
+resid2_fm13 <- HLMresid(object = fm13, level = "TreeId")
+head(resid2_fm13)
+
+res <- stff %>% 
+  select(Treat, TreeId) %>% 
+  unique() %>% 
+  inner_join(mutate(resid2_fm13, TreeId = row.names(resid2_fm12))) %>%
+  select(1:2, pw0coeff = 3, pw1coeff = 4, pw2coeff = 5, pw3coeff = 6) %>%
+  gather(param, value,  3:6)
+
+# paste0("pw",0:3,"coeff = ", 3:6, collapse=", ")
+
+ggplot(res, aes(x = Treat, y = value)) +
+  geom_boxplot() +
+  geom_hline(yintercept = 0) +
+  facet_wrap(~param, scales = "free")
+
+res %$%
+  qplot(x = Treat, y = value, geom = 'boxplot', facets = ~param,
+  xlab = 'distance between rows', main = 'level-2 residual')
+
+
+
+```
+
+
+
+# Opzione non esplorata:
+Forse è più semplice dividere il range di Sect_height in 3 parti < 1 e >4 (zeri dell'intepolazione generale dei residui dal modello lineare) ed utilizzare quats avriabile come ulteriore 'effetto fisso'. A quel punto l'approssimazione lineare di delta_d=f(Sect_heiht) dovrebbe essere presentabile.
+
+[rmarkdown::render("PdP_HLM3.Rmd", encoding="UTF-8")]

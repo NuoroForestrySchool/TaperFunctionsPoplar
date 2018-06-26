@@ -1,6 +1,7 @@
 ---
 title: "Contrasting between- and within-rows stem profiles in poplar plantations - Avaiable data"
-authtors: Puletti N., Scotti R., ???
+author: "Puletti N., Scotti R., ???"
+date: june 2018
 output:
   pdf_document:
     toc: true
@@ -57,7 +58,7 @@ TLSderivedDiam %>%
 TLSderivedDiam %>% 
   select(- ends_with("centro")) %>%
   summarize_all_numeric(stats=c("min", "median", "mean", "max"), na.rm = T) %>%
-  kable(align = 'c', caption = "Statistics for all numeric variables")
+  kable(align = 'c', caption = "Extended statistics for main numeric variables")
 
 
 ```
@@ -68,6 +69,7 @@ TLSderivedDiam %>%
 ```{r plot, fig.height=9, fig.width=7}
 Diameters <- TLSderivedDiam %>% 
   select( -ends_with("centro")) %>% 
+  filter(complete.cases(.)) %>%
   gather(direction, diam, starts_with("diam"))
 
 gl <- Diameters %$%
@@ -85,4 +87,5 @@ print(gl)
 
 ```
 
+[rmarkdown::render("AvailableData.Rmd", encoding="UTF-8")]
 
