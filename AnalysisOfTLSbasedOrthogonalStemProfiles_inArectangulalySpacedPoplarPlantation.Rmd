@@ -1,0 +1,206 @@
+---
+title: "Contrasting TLS-derived orthogonal stem profiles, in poplar plantations"
+author: "Puletti N., Grotti M., Scotti R."
+date: june 2018
+output:
+  pdf_document:
+    toc: true
+---
+  
+# General scope
+Assessment of poplar profiles sensitivity to competition anisotropy and to plantation density.
+Three plots have been established in a poplar plantation of 10 years in Viadana (Mantova).
+Poplar rows are alternated with rows of other valuable (but less fast growing) species, one every two poplar rows. Distances from stem to stem within the plantation rows vary between the plots: 4 m, 4.5 m and 5 m. Distance between the the plantation rows is 9 m. Each plot includes 12 stems from two facing rows. 
+<TLS survay details>
+Based on TLS-data, stem profiles from two orthogonal vertical crosssections have been determined: one along the rows direction and the other on the between-rows direction.
+Profiles have been sampled systematically adopting different segment lengths (Segm_lenght) estimating stem crosssection width (diam_btw_rows and diam_wti_rows) at different heigths along the stem (Sect_height)
+
+[MEMO: credo sia opportuno ricordarsi di guardare
+ Rubio-Cuadrado Á, Bravo-Oviedo A, Mutke S, Del Río M (2018). Climate effects on growth differ according to height and diameter along the stem in Pinus pinaster Ait. iForest 11: 237-242. – doi: 10.3832/ifor2318-011 [online 2018-03-12]]
+
+# Setup and fetch the data
+
+```{r read-data}
+library(tidyverse)
+library(magrittr)
+library(ggplot2)
+
+source("DataWrangling.R")
+
+```
+
+# Data synthesis
+
+```{r Data synthesis, fig.height=4, fig.width=6}
+library(knitr)
+
+tff %>%
+  select(Treat, TreeId, dbh = DBH) %>%
+  unique() %>%
+  ggplot(aes(y = dbh, x = Treat)) + geom_boxplot(colour = "darkgrey") +
+  geom_jitter(width = .1, height = 0.15) + 
+  ggtitle("Effect of plantation density on brest height diametr (dbh)") +
+  ylab("dbh [cm]")
+
+tff %>%
+  select(Treat, TreeId, dbh = DBH) %>%
+  unique() %>%
+  lm(dbh ~ Treat, data = .) %>%
+  summary() %>% tidy() %>%
+  kable(digits = 3, format.args = list(zero.print = F),
+        caption = "Plantation density effect on 'dbh'")
+
+TLSdbh_df <- tff %>% 
+  filter(abs(1.3 - Sect_height)<.0001) %>% 
+  select(Treat, treid, TreeId, dbh = DBH, starts_with('diam')) %>%
+  gather(direction, TLSdbh, starts_with('diam')) %>%
+  mutate(TLSdbh = 100 * TLSdbh) 
+
+TLSdbh_df %>%
+  lm(TLSdbh ~ Treat + direction, data = .) %>%
+  summary() %>% tidy() %>%
+  kable(digits =c(0, 2, 3, 3, 5), 
+        caption = "Plantation density and measurement directions effects on TLS estimated dbh")
+
+
+```
+  
+In the observed conditions poplar stems display an elliptical crosssection: width measured along the direction where competiors a nearer (within plantation rows) is almost 2 cm smaller than the orthogonal measure (between rows, where the competing subjects are relatively further away).  
+The difference observed at brest height level corresponds to the gross average of the differences measured up to 5 m along the stem.  
+
+
+# To be careful about!
+
+```{r}
+TLSdbh_df %>%
+  ggplot(aes(x = dbh, y = TLSdbh, shape = direction, 
+             linetype = direction, color = Treat)) +
+  geom_abline(slope=1, color = "grey") +  geom_point() + geom_line() +
+  scale_linetype_manual(values=c("twodash", "dotted")) +
+  scale_x_continuous(breaks = seq(0, 100, 1)) +
+  scale_y_continuous(breaks = seq(0, 100, 1)) +
+  ggtitle("Field measured dbh and corresponding TLS estimates",
+          subtitle = "between- and within-rows estiamates by plantation density")
+
+```
+
+
+# Plot all profiles
+
+```{r plot, fig.height=9, fig.width=7}
+Diameters <- TLSderivedDiam %>% 
+  select( -ends_with("centro")) %>% 
+  filter(complete.cases(.)) %>%
+  gather(direction, diam, starts_with("diam"))
+
+gl <- Diameters %$%
+  levels(tesi) %>%
+  map(
+    ~ Diameters %>%
+      filter(tesi == .x) %>%
+      ggplot(aes(slice, diam)) +
+      geom_line(aes(color = direction)) +
+      facet_grid(treid ~ length_toppo, scales = "free") +
+      ggtitle(paste0("Tesis: '", .x, "'")) +
+      theme(plot.title = element_text(hjust = 0.5))
+  )
+print(gl)
+
+```
+
+# Selection of the most convenient segment length level for detailed analysis
+
+```{r}
+tff %>%
+  filter(complete.cases(.)) %>%
+  select(Segm_length, Sect_height) %>%
+  unique() %$%
+  table(Segm_length) %>% t() %>%
+  cbind(t(matrix("freq", dimnames = list("segment length") )), .) %>%
+  kable( align = 'c',
+        caption = "Number of sections estimated on each tree for each segment-length level")
+
+tff %>% 
+  group_by(Segm_length) %>%
+  do( fit = tidy(lm(data = ., delta_d ~ Treat * TreeId ))) %>%
+  unnest() %>%
+  filter(substr(term, 1, 5) %in% c("Treat")) %>%
+  select(-c(3:5)) %>%
+  spread(term, p.value) %>%
+  kable(caption = "ANOVA p.values for Treat by Segm_length from: lm(delta_d ~ Treat * TreeId) ")
+
+oll <- 0.1 # optimal Log Length for profiles discrimination
+# Segm_length ottimale: compromesso tra min lag correlation e conservazione del dettaglio della forma
+stff <- tff  %>%
+  filter(Segm_length == oll)
+
+```
+
+# Profile's difference analysed by Hierarchical Linear Modeling (HLM)
+
+```{r}
+library(lme4)
+library(HLMdiag)
+
+mc <- function(frml, main = paste0(as.expression(frml)), ...) {
+# evaluate the model (specified as formula) and produce the residulas control plot
+  fm <- stff %>%  lmer(data = ., frml, ... )
+  p <- qplot(x = stff$Sect_height, y = residuals(fm), 
+        geom = c("point", "smooth")) + 
+    xlab("cross-section height [m]") +
+    ylab("level-1 residuals") +
+    ggtitle(main)
+  print(p)
+return(fm)
+}
+
+# prova CON Sect_height, al cubo (con RML=T, non converge!)
+fm13 <- mc(delta_d_cm ~ Treat + (1 | TreeId) 
+           + Sect_height *(1 | TreeId) 
+           + I(Sect_height^2)* (1 | TreeId)
+           + I(Sect_height^3)* (1 | TreeId)
+           , REML = F
+           , main = "delta_d ~ Treat + (poly(Sect_height, 3)| TreeId)")
+
+stff %>% ggplot() +
+  geom_point(aes(x = Sect_height, y = delta_d_cm)) +
+  geom_smooth(aes(x = Sect_height, y = delta_d_cm)) +
+  geom_line(aes(x = Sect_height, y = fitted(fm13)), color = "yellow", size = 1) + 
+  facet_wrap(~TreeId) +
+  ggtitle("Nested models fitting profile differences by tree")
+
+resid2_fm13 <- HLMresid(object = fm13, level = "TreeId")
+names(resid2_fm13) <- paste0("pw",0:3,"coeff")
+# head(resid2_fm13)
+
+stff %>% 
+  select(Treat, TreeId) %>% 
+  unique() %>% 
+  inner_join(mutate(resid2_fm13, TreeId = row.names(resid2_fm13))) %>%
+  gather(param, value,  3:6) %>%
+  ggplot(aes(x = Treat, y = value)) +
+  geom_boxplot(color = "darkgrey") +
+  geom_jitter(width = .15, height = 0) + 
+  geom_hline(yintercept = 0) +
+  facet_wrap(~param, scales = "free") +
+  ggtitle("Level 2 (Treat = plantation distance) residuals")
+
+Treat_anova <- stff %>%  
+  lmer(data = ., delta_d_cm ~ 
+             1 * (1 | TreeId) 
+           + Sect_height *(1 | TreeId) 
+           + I(Sect_height^2)* (1 | TreeId)
+           + I(Sect_height^3)* (1 | TreeId)
+           , REML = F) %>%
+  anova(fm13)
+
+Treat_anova %>%
+  mutate_all(funs(ifelse(is.na(.), 0, .))) %>%
+  kable(digits = c(0, 2, 2, 2, 2, 4, 0, 4), format.args = list(zero.print = F), 
+    caption = cat(paste("Contribution of plantation distance (Treat) to profiles differences variance explaination", paste(attributes(Treat_anova)$heading[-1], collapse = "\n"), collapse = "\n")))
+
+```
+
+
+[rmarkdown::render("AnalysisOfTLSbasedOrthogonalStemProfiles_inArectangulalySpacedPoplarPlantation.Rmd", encoding="UTF-8")]
+

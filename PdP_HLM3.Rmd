@@ -1,6 +1,6 @@
 ---
 title: "Contrasting between- and within-rows stem profiles in poplar plantations - Modelling tree and 'Treat' effect - HLM approach"
-author: "Puletti N., Scotti R., ???"
+author: "Puletti N., Grotti M., Scotti R."
 date: june 2018
 output:
   pdf_document:

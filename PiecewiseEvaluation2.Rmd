@@ -1,6 +1,6 @@
 ---
 title: "Contrasting between- and within-rows stem profiles in poplar plantations - Modelling tree and 'Treat' effect - Piecewise approach"
-author: "Puletti N., Scotti R., ???"
+author: "Puletti N., Grotti M., Scotti R."
 date: june 2018
 output:
   pdf_document:
@@ -31,7 +31,7 @@ fm4 <- lm(data=stff, delta_d_cm ~ poly(Sect_height,4) * TreeId)
 
 ## Stepwise Selection Method   
 ## ---------------------------
-## Candidate Terms: 
+## Candidate terms: 
 ## 1. poly(Sect_height, 4) 
 ## 2. TreeId 
 ## 3. poly(Sect_height, 4):TreeId 
@@ -91,7 +91,7 @@ stff %>% ggplot(aes(x = Sect_height, y = delta_d_cm)) +
 # Actually even power 4 could be too high, some bendings are in excess
 
 # Insted of wrangling with opt_m estimates,
-# it is more straightforward to recompute power 4 poly coefficients estimates for each tree
+# it is more straightforward to recompute power 3 poly coefficients estimates for each tree
 
 l1p <- stff %>%
   group_by(TreeId) %>%
@@ -102,16 +102,17 @@ l1p <- stff %>%
     
 ```
 
-# Level 2 modelling: evaluation of the effects of 'Treat' on level 1 (tree level) parameters
+# Level 2 modelling: evaluation of the effects of 'Treat' on the coefficients of level 1 (tree level) polynomial terms 
 
 ```{r}
 
 l1p %>%
   spread(term, estimate) %>%
   select(3:6) %>%
-  cor()
+  cor() %>%
+  kable(align = 'c', digits = 3, caption = "Correlations among coefficients")
 
-# evaluations disregarding coefficients standard deviation
+# evaluations disregarding standard deviation of the terms coefficients
 
 # separate evaluations, one for each delta_d=f(Sect_height) function coefficient
 l1p %>%

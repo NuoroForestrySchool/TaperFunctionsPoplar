@@ -31,13 +31,7 @@ trsh.C10         <-    3.8
 tff <- tff %>%
   filter(!(TreeId == 'C10' & Sect_height >= trsh.C10))
 
-tff <- mutate(tff, delta_d = diam_btw_rows - diam_wti_rows)
-oll <- 0.1 # optimal Log Length for profiles discrimination
-# Segm_length ottimale: compromesso tra min lag correlation e conservazione del dettaglio della forma
-stff <- tff  %>%
-  filter(Segm_length == oll)
-
-stff <- stff %>%
-  mutate(delta_d_cm = delta_d * 100)  
+tff <- mutate(tff, delta_d = diam_btw_rows - diam_wti_rows,
+              delta_d_cm = delta_d * 100)  
 # !!!! PER ESPRIMERE IN cm!! LE MISURE SONO IN m, VERO??
 
