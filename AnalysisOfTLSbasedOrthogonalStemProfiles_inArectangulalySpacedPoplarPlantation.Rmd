@@ -11,7 +11,7 @@ output:
 Assessment of poplar profiles sensitivity to competition anisotropy and to plantation density.
 Three plots have been established in a poplar plantation of 10 years in Viadana (Mantova).
 Poplar rows are alternated with rows of other valuable (but less fast growing) species, one every two poplar rows. Distances from stem to stem within the plantation rows vary between the plots: 4 m, 4.5 m and 5 m. Distance between the the plantation rows is 9 m. Each plot includes 12 stems from two facing rows. 
-<TLS survay details>
+<TLS survey details>
 Based on TLS-data, stem profiles from two orthogonal vertical crosssections have been determined: one along the rows direction and the other on the between-rows direction.
 Profiles have been sampled systematically adopting different segment lengths (Segm_lenght) estimating stem crosssection width (diam_btw_rows and diam_wti_rows) at different heigths along the stem (Sect_height)
 
@@ -72,13 +72,17 @@ The difference observed at brest height level corresponds to the gross average o
 # To be careful about!
 
 ```{r}
-TLSdbh_df %>%
-  ggplot(aes(x = dbh, y = TLSdbh, shape = direction, 
-             linetype = direction, color = Treat)) +
-  geom_abline(slope=1, color = "grey") +  geom_point() + geom_line() +
-  scale_linetype_manual(values=c("twodash", "dotted")) +
-  scale_x_continuous(breaks = seq(0, 100, 1)) +
-  scale_y_continuous(breaks = seq(0, 100, 1)) +
+TLSdbh_df %>% 
+  spread(direction, TLSdbh) %>%
+  mutate( dbh = jitter(dbh, factor = 1)) %>%
+  ggplot(aes(x = dbh, color = Treat)) +
+  geom_abline(slope=1, color = "grey") +
+  geom_errorbar(aes(ymin=diam_wti_rows, ymax=diam_btw_rows), 
+                width = .2, linetype =2, size = .5) +
+  geom_line(aes(y = I((diam_wti_rows + diam_btw_rows)/2))) +
+  geom_point(aes(y = I((diam_wti_rows + diam_btw_rows)/2)), shape = 1) +
+  scale_x_continuous(breaks = seq(0, 100, 1), minor_breaks = NULL) +
+  scale_y_continuous(breaks = seq(0, 100, 1), minor_breaks = NULL) +
   ggtitle("Field measured dbh and corresponding TLS estimates",
           subtitle = "between- and within-rows estiamates by plantation density")
 
@@ -105,6 +109,9 @@ gl <- Diameters %$%
       theme(plot.title = element_text(hjust = 0.5))
   )
 print(gl)
+# install.packages("svglite")
+for(i in 1:3) ggsave(paste0("AllProfiles",i,".svg"), gl[[i]], scale = 2)
+
 
 ```
 
@@ -119,6 +126,23 @@ tff %>%
   cbind(t(matrix("freq", dimnames = list("segment length") )), .) %>%
   kable( align = 'c',
         caption = "Number of sections estimated on each tree for each segment-length level")
+
+tff %>% 
+  group_by(Segm_length, Treat) %>%
+  summarise(mean_delta = mean(delta_d_cm)) %>%
+  ggplot(aes(x = Segm_length, y = mean_delta, colour = Treat)) +
+  geom_point() + geom_line() +
+  ylab("BetweenRowsDiam - WithinRowsDiameter [cm] Averages") +
+  xlab("Lenght of analysis segments [m]") +
+  ggtitle("Stem crosssections are significantly wider in the direction with less competition (between plantation rows = 9 m )\n Average difference between orthogonal profiles are clearly greather at lower density (5 m along the rows, vs 4 m)", subtitle = "Length of analysis segments has little influence, but ... (next graph)")
+
+tff %>% 
+  ggplot(aes(x = Treat, y = delta_d_cm, colour = Treat)) + 
+  geom_boxplot() +
+  stat_summary(fun.y = mean, geom = "point", shape = 13, size = 4) +
+  facet_grid(~Segm_length, labeller = label_both) + 
+  ylab("BetweenRowsDiam - WithinRowsDiameter [cm]") +
+  ggtitle("The variability of the difference between orthogonal profiles\n hides completely the effect of plantation density (means = crossed circles)", subtitle = "Will tree level modelling let the effect emerge?")
 
 tff %>% 
   group_by(Segm_length) %>%
@@ -136,7 +160,10 @@ stff <- tff  %>%
 
 ```
 
+
 # Profile's difference analysed by Hierarchical Linear Modeling (HLM)
+
+Tree level modelling has been developed based on crossesctions estimated dividing the stem in segments of `r oll` meters.
 
 ```{r}
 library(lme4)
@@ -198,6 +225,14 @@ Treat_anova %>%
   mutate_all(funs(ifelse(is.na(.), 0, .))) %>%
   kable(digits = c(0, 2, 2, 2, 2, 4, 0, 4), format.args = list(zero.print = F), 
     caption = cat(paste("Contribution of plantation distance (Treat) to profiles differences variance explaination", paste(attributes(Treat_anova)$heading[-1], collapse = "\n"), collapse = "\n")))
+
+fm13 %>%
+  augment() %>% 
+  ggplot(aes(x = Treat, y = .fitted, colour = Treat)) + 
+  geom_boxplot() +
+  stat_summary(fun.y = mean, geom = "point", shape = 13, size = 4) +
+  ylab("BetweenRowsDiam - WithinRowsDiameter [cm] Model estimates") +
+  ggtitle("In the direction with less competition stem cross-sections are 1.6-1.8 cm wider but,\n even accounting for tree-level effects, the variability of the difference between orthogonal profiles\n still completely hides the effect of plantation density (means = crossed circles)")
 
 ```
 
