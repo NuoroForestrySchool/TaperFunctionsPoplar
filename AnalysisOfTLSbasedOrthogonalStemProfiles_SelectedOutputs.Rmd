@@ -1,0 +1,123 @@
+---
+title: "SELECTED pieces from: 
+        Contrasting TLS-derived orthogonal stem profiles, in poplar plantations"
+author: "Puletti N., Grotti M., Scotti R."
+date: september 2018
+output: word_document
+---
+
+# Select some profiles
+
+```{r selection, echo=FALSE, message=FALSE}
+library(tidyverse)
+
+#TLSstem_vertical_crosssection
+source("DataWrangling.R")
+
+sel_trees <- tribble(
+  ~ Treat, ~ treid,
+  "V400", "s01",
+     NA , "s03",
+     NA , "s07",
+     NA , "s12",
+  "V450", "s07",
+     NA , "s08",
+     NA , "s09",
+     NA , "s12",
+  "V500", "s03",
+     NA , "s04",
+     NA , "s08",
+     NA , "s12"
+  ) %>% 
+  fill(Treat) %>%
+  mutate(treid2 = rep(LETTERS[1:4],3)) %T>%
+  print
+
+
+```
+
+
+# Plot selected profiles
+
+```{r plot1, fig.height=5, fig.width=c(3.2, 6.6), echo=FALSE, message=FALSE}
+
+tff %>% 
+  select( -ends_with("centro")) %>% 
+  filter(complete.cases(.)) %>%
+  gather(direction, diam, starts_with("diam")) %>%
+  filter(Segm_length == 0.1) %>%
+  inner_join(sel_trees) %>%
+  mutate(direction = recode(direction, 
+                            diam_btw_rows = "lowest",
+                            diam_wti_rows = "highest")) %>% 
+  mutate(direction = factor(direction, levels = rev(sort(unique(direction))))) %>%
+  ggplot(aes(Sect_height, diam)) +
+  xlab("cross-section height [m]") +
+  ylab("stem diameter [cm]") +
+  geom_line(aes(linetype = direction)) +
+  guides(linetype = guide_legend(title=
+        "competition\nalong the\nmeasurement\ndirection")) +
+  facet_grid(treid2 ~ Treat, scales = "free") +
+  ggtitle(paste0("Selected profiles"), 
+          subtitle = "diameter measures are taken facing competitors") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+# ggsave("Fig_SelectedProfiles.svg", width = 17, units="cm")
+
+```
+
+The analysis considers the lower part of the stems, up to 6 m high. The typical neiloidic shape due to butt swell and the transition to the parabloidic shape of the central part of the bole are well recognizable in all the selected profiles. Single curves present some irregularities that are due to data extraction problems. All stems exibit some level of difference between the profile based on measurements taken along the 'row' direction, where competition is higher because the neighbours are nearer (and bigger), and the orthogonal measurements, in the direction with the lowest competition.
+
+
+# Quantitative effects
+
+```{r}
+library(kableExtra)
+
+TLSdbh_df <- tff %>% 
+  filter(abs(1.3 - Sect_height)<.0001) %>% 
+  select(Treat, treid, TreeId, dbh = DBH, starts_with('diam')) %>%
+  gather(direction, TLSdbh, starts_with('diam')) %>%
+  mutate(TLSdbh = 100 * TLSdbh) 
+
+TLSdbh_df %>%
+  lm(TLSdbh ~ Treat + direction, data = .) %>%
+  summary() %>% tidy()  %>%
+  kable(digits =c(0, 2, 3, 3, 5), format = 'markdown',
+        caption = "Lateral compression of dbh and plantation density effects")
+
+```
+
+Statistical analysis of brest height diameters quantitatively documents the effects of stand density and anisotropic competition. Average diameter for the 4 m spacing is over 37 cm. Increasing the distannce between trees along the row from 4 m to 4.5 m, average diameter increases 2 cm, further increasing to 5 m, average diameter grows almost one centimeter more. On top of all this, the analysis evidences that, on average, brest height crossections are compressed in the row direction: diameters in that direction are 1.8 cm smaller tha the orthogonal ones.
+
+# Cross section compression
+
+```{r plot2, fig.height=5, fig.width=c(3.2, 6.6), echo=FALSE}
+tff %>% 
+  filter(Segm_length == 0.1) %>%
+  group_by(Sect_height, Treat) %>%
+  summarise(mean_delta = mean(delta_d_cm)) %>%
+  mutate(Treat = recode_factor(Treat, 
+                  V400 = "4.0", V450 = "4.5", V500 = "5.0")) %>%
+  ggplot(aes(x = Sect_height, y = mean_delta, linetype = Treat)) +
+  geom_smooth(colour = "grey40") +
+  theme_bw() +
+  theme(legend.position = c(0.8, 0.7),
+        legend.background = 
+          element_rect(size=0.5, linetype="solid", colour ="grey")) +
+  guides(linetype = guide_legend(title=
+        "distance [m]\nto nearest\ncompetitor")) +
+  ylab("diameter difference [cm]") +
+  xlab("height of the section [m]") +
+  ggtitle("Compression of the stems horizontal crosssections", 
+          subtitle = "difference between diameter in low-competition-direction and that in high-competition-direction")
+# ggsave("Fig_CrosssectionCompression.png", width = 17, units="cm")
+
+```
+
+Average values and average variability has been computed poolig data from all profiles for each treatment. Cross section compression is evidenced considering the differences between the diameters measured in the two orthogonaldirections: along the rows, where competition is higher and variable (distances to neibouring trees vary from 4 m to 5 m), and between rows (lowest competition, 9 m to nearest competitor). The average differences for the treatment with less competition (5 m along the row) is consistently less than for cases with higher competition (4-4.5m to next competitor). Some irregularities appear in the lower part of the stem where, in the 4 m treatment, cross section compression is, on average, less than for the 4.5 m treatment.
+
+```{r, echo=FALSE}
+# rmarkdown::render("AnalysisOfTLSbasedOrthogonalStemProfiles_SelectedOutputs.Rmd", encoding="UTF-8")
+```
+
